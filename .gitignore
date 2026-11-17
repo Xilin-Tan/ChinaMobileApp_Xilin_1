@@ -1,0 +1,34 @@
+# Codex 工作目录约定：work/ 是中间产物，outputs/ 是本地产出
+work/
+outputs/
+
+# 依赖与构建
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+target/
+
+# 环境变量与密钥（务必忽略）
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+secrets.*
+
+# 日志与临时文件
+*.log
+*.tmp
+*.bak
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
