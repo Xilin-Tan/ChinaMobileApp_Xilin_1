@@ -24,6 +24,7 @@ $sources = @(
     (Join-Path $root 'core\XlsxWriter.cs'),
     (Join-Path $root 'app\Pipeline.cs'),
     (Join-Path $root 'app\Summary.cs'),
+    (Join-Path $root 'app\Chart.cs'),
     (Join-Path $root 'app\Inbox.cs'),
     (Join-Path $root 'app\MainForm.cs'),
     (Join-Path $root 'app\Program.cs')

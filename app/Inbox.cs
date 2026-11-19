@@ -170,6 +170,37 @@ namespace ReportTool.App
             return a.Modified > b.Modified;
         }
 
+        /// <summary>
+        /// 只读工作表名（毫秒级），用来判断这是哪一份报表。
+        /// 不做整表解析 —— 目录里混着 14 MB 的大表，全量读会卡很久。
+        /// 读不出来返回空列表。
+        /// </summary>
+        public static List<string> QuickSheetNames(string path)
+        {
+            var names = new List<string>();
+            try
+            {
+                using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var zip = new ZipArchive(fs, ZipArchiveMode.Read))
+                {
+                    string wbXml = ReadEntryText(zip, "xl/workbook.xml");
+                    if (wbXml == null) return names;
+                    var doc = new System.Xml.XmlDocument();
+                    doc.XmlResolver = null;
+                    doc.LoadXml(wbXml);
+                    foreach (System.Xml.XmlNode n in doc.GetElementsByTagName("sheet"))
+                    {
+                        var a = n.Attributes["name"];
+                        if (a != null) names.Add(a.Value);
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                names.Clear();
+            }
+            return names;
+        }
         // ================= 读「通报时间」用的轻量探针 =================
         // 只解开 zip 取两张工作表 xml、用正则定位，不建整表模型、不算公式。
         // 单份约 20~60 毫秒，扫一遍目录的十几份文件不到 1 秒。

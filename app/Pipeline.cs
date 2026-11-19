@@ -50,6 +50,11 @@ namespace ReportTool.App
         public List<FileResult> Files = new List<FileResult>();
         // 关键指标表，供界面展示
         public List<PreviewTable> Tables = new List<PreviewTable>();
+        // 图表数据，界面按它画预览
+        public List<ChartData> Charts = new List<ChartData>();
+        // 生成的图片路径（每张图一个文件，外加一张拼好的"一页纸"）
+        public List<string> ChartFiles = new List<string>();
+        public string CombinedChartPath;
 
         public bool Ok
         {
@@ -66,27 +71,37 @@ namespace ReportTool.App
         /// <summary>按工作表结构判断这是哪一份报表。</summary>
         public static ReportKind Detect(Workbook wb)
         {
-            bool hasGrid = wb.Sheets.ContainsKey("网格层级重点业务通报");
-            bool hasIncome = wb.Sheets.ContainsKey("收入");
-            bool hasAuto = wb.Sheets.ContainsKey("auto");
+            var names = new List<string>();
+            foreach (var s in wb.AllSheets) names.Add(s.Name);
+            return Detect(names);
+        }
+
+        /// <summary>按工作表名判断报表类型。与 Detect(Workbook) 同一套规则。</summary>
+        public static ReportKind Detect(IList<string> sheetNames)
+        {
+            bool hasGrid = false, hasIncome = false, hasAuto = false, hasReport = false;
+            foreach (var n in sheetNames)
+            {
+                if (string.Equals(n, "网格层级重点业务通报", StringComparison.OrdinalIgnoreCase)) hasGrid = true;
+                else if (string.Equals(n, "收入", StringComparison.OrdinalIgnoreCase)) hasIncome = true;
+                else if (string.Equals(n, "auto", StringComparison.OrdinalIgnoreCase)) hasAuto = true;
+                else if (string.Equals(n, "通报", StringComparison.OrdinalIgnoreCase)) hasReport = true;
+            }
             if (!hasAuto) return ReportKind.Unknown;
             if (hasGrid) return ReportKind.Grid;
             if (hasIncome) return ReportKind.KeyBusiness;
-            if (wb.Sheets.ContainsKey("通报")) return ReportKind.County;
+            if (hasReport) return ReportKind.County;
             return ReportKind.Unknown;
         }
 
-        /// <summary>只读书结构，不重算，用于拖入时即时识别。</summary>
+        /// <summary>
+        /// 快速识别：只读工作表名，不解析整表。
+        /// 拖入文件夹时可能有上百个文件、还混着几十 MB 的大表，
+        /// 整表读会把界面卡死，这里必须保持毫秒级。
+        /// </summary>
         public static ReportKind Peek(string path)
         {
-            try
-            {
-                return Detect(XlsxReader.Read(path));
-            }
-            catch
-            {
-                return ReportKind.Unknown;
-            }
+            return Detect(Inbox.QuickSheetNames(path));
         }
 
         /// <summary>
@@ -159,17 +174,56 @@ namespace ReportTool.App
                             "，迭代 " + fr.Passes + " 轮，" + fr.ElapsedMs + " 毫秒）");
 
                     if (fr.Kind == ReportKind.County)
+                    {
                         Summary.ExtractCounty(wb, batch.Tables);
+                        Summary.BuildCountyCharts(wb, batch.Charts);
+                    }
                     else if (fr.Kind == ReportKind.Grid)
+                    {
                         Summary.ExtractGrid(wb, batch.Tables);
+                        Summary.BuildGridCharts(wb, batch.Charts);
+                    }
                     else if (fr.Kind == ReportKind.KeyBusiness)
+                    {
                         Summary.ExtractKeyBusiness(wb, batch.Tables);
+                        Summary.BuildKeyBusinessCharts(wb, batch.Charts);
+                    }
                 }
                 catch (Exception ex)
                 {
                     fr.Error = ex.Message;
                     fr.ElapsedMs = sw.ElapsedMilliseconds;
                     if (log != null) log("  失败：" + ex.Message);
+                }
+            }
+
+            // 出图：每张单独一个 PNG，"一页纸"再拼一张
+            if (batch.Charts.Count > 0)
+            {
+                try
+                {
+                    int i = 1;
+                    foreach (var c in batch.Charts)
+                    {
+                        string name = "图" + i + "_" + SafeName(c.Title) + ".png";
+                        string path = Path.Combine(dir, name);
+                        ChartRenderer.Save(c, path);
+                        batch.ChartFiles.Add(path);
+                        if (log != null) log("  出图：" + name);
+                        i++;
+                    }
+                    if (batch.Charts.Count > 1)
+                    {
+                        string all = Path.Combine(dir, "日报_一页纸.png");
+                        ChartRenderer.SaveStack(batch.Charts, all, 900);
+                        batch.CombinedChartPath = all;
+                        if (log != null) log("  出图：日报_一页纸.png（" + batch.Charts.Count + " 张拼在一起）");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // 出图失败不该影响已经算好的 Excel
+                    if (log != null) log("  出图失败：" + ex.Message);
                 }
             }
 
@@ -181,6 +235,22 @@ namespace ReportTool.App
             }
 
             return batch;
+        }
+
+        /// <summary>文件名里不能出现的字符换成下划线。</summary>
+        static string SafeName(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "未命名";
+            var bad = new[] { '\\', '/', ':', '*', '?', '"', '<', '>', '|' };
+            var sb = new System.Text.StringBuilder();
+            foreach (char ch in s)
+            {
+                bool ok = true;
+                foreach (char b in bad) if (ch == b) { ok = false; break; }
+                sb.Append(ok ? ch : '_');
+            }
+            string r = sb.ToString().Trim();
+            return r.Length > 30 ? r.Substring(0, 30) : r;
         }
     }
 }
