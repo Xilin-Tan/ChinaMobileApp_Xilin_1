@@ -16,7 +16,7 @@ namespace ReportTool.App
         readonly TextBox _log;
         readonly TabControl _tabs;
         readonly ToolStripStatusLabel _status;
-        readonly ToolStripButton _btnOpen, _btnClear, _btnPick;
+        readonly ToolStripButton _btnOpen, _btnClear, _btnPick, _btnScan;
 
         readonly List<string> _queue = new List<string>();
         bool _busy;
@@ -57,6 +57,14 @@ namespace ReportTool.App
             _dropText.Click += PickFiles;
             _drop.Controls.Add(_dropText);
 
+            var go = new Button();
+            go.Text = "一键取企业微信里的报表并生成";
+            go.Height = 30;
+            go.Dock = DockStyle.Bottom;
+            go.FlatStyle = FlatStyle.System;
+            go.Click += ScanWeChat;
+            _drop.Controls.Add(go);
+
             var split = new SplitContainer();
             split.Dock = DockStyle.Fill;
             split.Orientation = Orientation.Vertical;
@@ -95,6 +103,10 @@ namespace ReportTool.App
             _btnPick = new ToolStripButton("选择文件…");
             _btnPick.Click += PickFiles;
             strip.Items.Add(_btnPick);
+
+            _btnScan = new ToolStripButton("扫描企业微信");
+            _btnScan.Click += ScanWeChat;
+            strip.Items.Add(_btnScan);
 
             _btnOpen = new ToolStripButton("打开输出文件夹");
             _btnOpen.Enabled = false;
@@ -156,6 +168,55 @@ namespace ReportTool.App
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                     AddAndRun(dlg.FileNames);
             }
+        }
+
+        void ScanWeChat(object sender, EventArgs e)
+        {
+            if (_busy) return;
+            var folders = Inbox.FindWeChatFolders();
+            if (folders.Count == 0)
+            {
+                MessageBox.Show(this,
+                    "没有找到企业微信的接收目录。\r\n\r\n" +
+                    "请确认企业微信已登录、并且至少收到过一个文件。\r\n" +
+                    "也可以直接点「选择文件…」手动选。",
+                    "没找到", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 当月 + 上月一起扫：月初那几小时，最新一份可能还落在上个月的目录里
+            var all = Inbox.ListAll(folders);
+            if (all.Count == 0)
+            {
+                MessageBox.Show(this, "这些目录里没有能识别的报表：\r\n" + string.Join("\r\n", folders.ToArray()),
+                    "没有报表", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _queue.Clear();
+            _tabs.TabPages.Clear();
+            _log.Clear();
+            foreach (var fd in folders) Append("扫描目录：" + fd);
+            Append("共找到 " + all.Count + " 份可识别的报表，正在读取每份的通报时间…");
+            // 文件名序号和落盘时间都不可信，只能读内容里的通报时间
+            Inbox.ProbeTimes(all, Append);
+
+            var latest = Inbox.LatestPerKind(all);
+            Append("");
+            Append("取每一类里最新的一份：");
+            foreach (var f in latest)
+            {
+                string when = f.ReportTime.HasValue
+                    ? f.ReportTime.Value.ToString("MM-dd HH:mm")
+                    : "时间读不到，按修改时间 " + f.Modified.ToString("MM-dd HH:mm");
+                string note = "";
+                // 企业微信可能正在写这个文件，等它落盘
+                if (!Inbox.WaitUntilReady(f.Path, 3000)) note = "  [可能还在下载]";
+                Append("  " + KindNames.Of(f.Kind) + "：" + Path.GetFileName(f.Path) +
+                       "（通报 " + when + "，" + (f.Size / 1024) + " KB）" + note);
+                _queue.Add(f.Path);
+            }
+            Run();
         }
 
         void AddAndRun(string[] paths)
