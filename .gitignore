@@ -1,6 +1,18 @@
-# Codex 工作目录约定：work/ 是中间产物，outputs/ 是本地产出
+# Codex 工作目录约定
 work/
 outputs/
+dist/
+
+# 编译产物
+*.exe
+*.dll
+*.pdb
+
+# 真实业务数据 —— 绝不入库（仓库是 Public！）
+input/
+samples/real/
+*.xlsx
+!samples/demo/*.xlsx
 
 # 依赖与构建
 node_modules/
@@ -12,7 +24,7 @@ dist/
 build/
 target/
 
-# 环境变量与密钥（务必忽略）
+# 环境变量与密钥
 .env
 .env.*
 !.env.example

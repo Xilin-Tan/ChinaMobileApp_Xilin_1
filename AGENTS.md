@@ -32,8 +32,10 @@
 ## 环境事实
 
 - Windows；Git 2.56.1 位于 `G:\Git\Git\`，已在系统 PATH。
-- **未安装**：JDK、Android SDK、Flutter、Node、Python、微信开发者工具。
-- 开发环境尚未搭建 —— 等需求确认后再装，见 `docs/02-环境与工具.md`。
+- 技术栈已定：**.NET Framework 4.8 + C# + WinForms**，Windows 自带，
+  编译器 `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`（C# 5 语法）。
+  **不需要装 JDK / Flutter / Node**，见 `docs/02-环境与工具.md`。
+- 编译：`powershell -ExecutionPolicy Bypass -File build.ps1` → `dist/ReportTool.exe`
 - 沙箱限制：本会话的 shell 用户与仓库所有者不同，**无法写 `.git/` 和 `~/.gitconfig`**。
   - 只读查询用 `git -c safe.directory=* ...`
   - 提交 / 推送由用户在自己的 PowerShell 执行
@@ -47,6 +49,39 @@
 | `docs/01-技术决策.md` | 已定的方案与理由 |
 | `docs/02-环境与工具.md` | 环境现状、踩过的坑与解决办法 |
 | `docs/03-待确认.md` | 尚未决定的问题 |
+
+## 代码结构（已实现）
+
+| 路径 | 作用 |
+|---|---|
+| `core/` | 引擎。读 xlsx → 重算全部公式 → 写回保留格式。不依赖任何 UI |
+| `core/Model.cs` | 数据结构（Workbook / Sheet / CellValue） |
+| `core/XlsxReader.cs` | 零依赖 xlsx 读取（解 zip + OOXML） |
+| `core/Lexer.cs` `core/Evaluator.cs` | 公式词法与求值（SUMIFS/RANK/ROUND/…） |
+| `core/Calculator.cs` | 不动点迭代重算 |
+| `core/XlsxWriter.cs` | 写回 xlsx，原格式一行不动 |
+| `app/` | WinForms 桌面界面 + 批处理流程 |
+| `app/Pipeline.cs` | 批量入口：识别报表类型 → 重算 → 输出 → 抽摘要 |
+| `app/Summary.cs` | 从结果里抽取要显示在界面上的表 |
+| `app/MainForm.cs` | 主窗口（拖拽区 + 日志 + 结果表） |
+| `tools/` | 诊断 / 冒烟测试，不参与发布 |
+| `build.ps1` | 一键编译成 `dist/ReportTool.exe`（单文件，约 50 KB） |
+
+编译与测试：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+## 已知的坑（实现相关）
+
+- 写回 xlsx 时**绝不能 `XmlNode.RemoveAll()`** —— 会连 `r`/`s` 属性一起删掉，格式全丢。
+  只删 `f`/`v`/`is` 子节点。
+- 单元格文本里常有换行（如 `宽带（…）\n-不含未知网格`），按表头找行要先截到第一行。
+- 区县表第二块（宽带）标题下方**隔一行**才是数据，偏移是 `标题行+2`，不是 `+1`。
+- 重点业务表的「指标大类/小类」是合并单元格，只在首行有值，要向下继承。
+- 共享公式（`<f t="shared">`）不支持，`XlsxReader` 会直接抛异常而不是算错。
+- 已去掉输出文件的 `fullCalcOnLoad`，否则 Excel 打开会自己重算一遍（慢）。
 
 ## 会话结束时的动作
 

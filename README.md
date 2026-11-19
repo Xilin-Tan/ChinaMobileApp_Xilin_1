@@ -19,12 +19,30 @@
 
 ```
 docs/      项目文档（进仓库）
-core/      报表引擎：解析、计算、渲染（不依赖 UI）
-shell/     桌面 / 网页 / 手机外壳
-assets/    图片、字体
+core/      报表引擎：读 xlsx、重算公式、写回（不依赖 UI）
+app/       Windows 桌面界面 + 批处理流程
+tools/     诊断与冒烟测试（不参与发布）
+dist/      编译产物 ReportTool.exe（不进仓库）
 work/      中间产物（不进仓库）
 outputs/   交付物（不进仓库）
 ```
+
+## 怎么用
+
+1. 双击 `dist\ReportTool.exe`
+2. 把当天的 xlsx 拖进上方虚线框（可一次拖三个，也可以拖整个文件夹）
+3. 等进度跑完，结果表出现在右边，文件在 `dist\outputs\日期\`
+
+输出文件保留原模板的全部格式（合并单元格、配色、条件格式、列宽），
+只是把公式格换成了算好的数值。
+
+## 怎么编译
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+只需要 Windows 自带的 .NET Framework 4.8，不用装任何东西。
 
 ## 日常存档
 
